@@ -1,0 +1,154 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local lp = Players.LocalPlayer
+local cam = workspace.CurrentCamera
+
+local SCALE_AMOUNT = 3
+local currentTarget = nil
+local lastHumanoid = nil
+local lastTargetUserId = nil
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "UndergroundGUI"
+gui.ResetOnSpawn = false
+gui.Parent = lp:WaitForChild("PlayerGui")
+
+local notif = Instance.new("TextLabel")
+notif.Size = UDim2.new(0, 320, 0, 40)
+notif.Position = UDim2.new(0.5, -160, 0, 10)
+notif.AnchorPoint = Vector2.new(0.5, 0)
+notif.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+notif.TextColor3 = Color3.new(1, 1, 1)
+notif.Text = "made by stxr._. on discord."
+notif.TextScaled = true
+notif.Font = Enum.Font.GothamBold
+notif.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.Parent = notif
+
+task.delay(3, function()
+    notif:Destroy()
+end)
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 180, 0, 40)
+button.Position = UDim2.new(0, 10, 0, 10)
+button.Text = "Underground: OFF"
+button.BackgroundColor3 = Color3.fromRGB(60, 60, 110)
+button.TextColor3 = Color3.new(1, 1, 1)
+button.TextScaled = true
+button.Font = Enum.Font.GothamBold
+button.BorderSizePixel = 0
+button.AutoButtonColor = true
+button.Parent = gui
+
+local uicorner = Instance.new("UICorner")
+uicorner.Parent = button
+
+local underground = false
+local offset = Vector3.new(0, -5, 0)
+local predictionStrength = 2
+local undergroundHeight = -5
+
+local function scaleTorsoOnly(part)
+    if not part then return end
+    part.Transparency = 1
+    part.LocalTransparencyModifier = 1
+    local mesh = part:FindFirstChildWhichIsA("SpecialMesh")
+    if mesh then
+        mesh.Scale = mesh.Scale * SCALE_AMOUNT
+    end
+end
+
+local function applyTorsoHitbox(character)
+    local upper = character:FindFirstChild("UpperTorso")
+    local lower = character:FindFirstChild("LowerTorso")
+    local torso = character:FindFirstChild("Torso")
+    if upper then scaleTorsoOnly(upper) end
+    if lower then scaleTorsoOnly(lower) end
+    if torso then scaleTorsoOnly(torso) end
+end
+
+local function onPlayerAdded(player)
+    if player.Character then
+        applyTorsoHitbox(player.Character)
+    end
+    player.CharacterAdded:Connect(applyTorsoHitbox)
+end
+
+for _, plr in pairs(Players:GetPlayers()) do
+    onPlayerAdded(plr)
+end
+Players.PlayerAdded:Connect(onPlayerAdded)
+
+local function getClosestPlayer()
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local closest, minDist = nil, math.huge
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= lp and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            if plr.UserId ~= lastTargetUserId then
+                local dist = (hrp.Position - plr.Character.HumanoidRootPart.Position).Magnitude
+                if dist < minDist then
+                    closest = plr
+                    minDist = dist
+                end
+            end
+        end
+    end
+    if not closest then
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= lp and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                return plr
+            end
+        end
+    end
+    return closest
+end
+
+button.MouseButton1Click:Connect(function()
+    underground = not underground
+    button.Text = underground and "Underground: ON" or "Underground: OFF"
+    local char = lp.Character
+    if not underground and char and char:FindFirstChild("HumanoidRootPart") then
+        char.HumanoidRootPart.CFrame += Vector3.new(0, 5, 0)
+    end
+    if char and char:FindFirstChild("Humanoid") then
+        cam.CameraSubject = char.Humanoid
+    end
+end)
+
+local function updateTarget()
+    local char = lp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local valid = currentTarget and currentTarget.Character and currentTarget.Character:FindFirstChild("HumanoidRootPart")
+    local humanoid = valid and currentTarget.Character:FindFirstChild("Humanoid")
+    if valid and humanoid and humanoid.Health > 0 and humanoid == lastHumanoid then
+        local targetHRP = currentTarget.Character:FindFirstChild("HumanoidRootPart")
+        local velocity = targetHRP.Velocity
+        local predOffset = velocity.Magnitude > 2 and velocity.Unit * predictionStrength or Vector3.zero
+        local targetPos = targetHRP.Position + predOffset
+        local isJumping = humanoid.Jump or velocity.Y > 1
+        local finalPosY = isJumping and hrp.Position.Y or (targetPos.Y + undergroundHeight)
+        local finalPos = Vector3.new(targetPos.X, finalPosY, targetPos.Z)
+        hrp.CFrame = CFrame.new(finalPos, finalPos + Vector3.new(0, 1, 0))
+        cam.CameraSubject = humanoid
+    else
+        local newTarget = getClosestPlayer()
+        if newTarget and newTarget.Character and newTarget.Character:FindFirstChild("Humanoid") then
+            currentTarget = newTarget
+            lastHumanoid = newTarget.Character:FindFirstChild("Humanoid")
+            lastTargetUserId = newTarget.UserId
+        end
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    if underground then
+        updateTarget()
+    end
+end)
