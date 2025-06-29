@@ -1,3 +1,5 @@
+--made by stxr._. on discord
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
